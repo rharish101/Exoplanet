@@ -13,7 +13,7 @@ batch_size = 32
 model = Sequential()
 model.add(Dense(512, input_dim=3197, activation='relu'))
 model.add(Dense(1, activation='sigmoid'))
-model.compile(optimizer='sgd', loss='binary_crossentropy',
+model.compile(optimizer='adam', loss='binary_crossentropy',
               metrics=['accuracy'])
 
 # Extract data
