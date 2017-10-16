@@ -36,9 +36,10 @@ else:
     labels = np.load(open('labels.npy', 'r'))
 
 # Shuffle data
-combined = np.dstack((data, labels))[0]
+combined = np.column_stack((data, labels))
 np.random.shuffle(combined)
-data, labels = combined.T
+data = combined.T[:-1].T
+labels = combined.T[-1].T
 
 # Split dataset
 train_data = data[:-int(len(data) * test_split)]
