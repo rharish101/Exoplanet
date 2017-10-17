@@ -64,3 +64,9 @@ print "Calculating test accuracy..."
 results = model.evaluate(test_data, test_labels, batch_size=32)
 print "Test accuracy:%6.2f%%" % (results[1] * 100)
 
+# Saving model
+response = raw_input("Do you want to save this model? (Y/n): ")
+if response.lower() not in ['n', 'no', 'nah', 'nein', 'nahi', 'nope']:
+    model.save('lstm.h5')
+    print "Model saved"
+
