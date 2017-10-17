@@ -2,12 +2,13 @@
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers.recurrent import LSTM
+from keras.callbacks import EarlyStopping
 import numpy as np
 import os
 
 # Hyperparametes
 test_split = 0.3
-num_epochs = 10
+num_epochs = 20
 batch_size = 32
 
 # Model definition
@@ -38,6 +39,10 @@ else:
     data = np.load(open('data.npy', 'r'))
     labels = np.load(open('labels.npy', 'r'))
 
+# Normalize data
+data = (data - np.mean(data, -1, keepdims=True)) / np.std(data, -1,
+                                                          keepdims=True)
+
 # Shuffle data
 combined = np.column_stack((data, labels))
 np.random.shuffle(combined)
@@ -52,8 +57,10 @@ test_data = data[-int(len(data) * test_split):]
 test_labels = labels[-int(len(labels) * test_split):]
 
 # Train and evaluate
-model.fit(train_data, train_labels, epochs=num_epochs, batch_size=batch_size)
+early_stop = EarlyStopping(monitor='loss', min_delta=1e-4, patience=3)
+model.fit(train_data, train_labels, epochs=num_epochs, batch_size=batch_size,
+          callbacks=[early_stop])
 print "Calculating test accuracy..."
-print "Test accuracy:%6.2f%%" % model.evaluate(test_data, test_labels,
-                                               batch_size=32)[1] * 100
+results = model.evaluate(test_data, test_labels, batch_size=32)
+print "Test accuracy:%6.2f%%" % (results[1] * 100)
 
