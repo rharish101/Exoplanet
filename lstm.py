@@ -3,8 +3,18 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers.recurrent import LSTM
 from keras.callbacks import EarlyStopping
+import keras.backend as K
 import numpy as np
 import os
+
+def f1_score(y_true, y_pred):
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    p = true_positives / (predicted_positives + K.epsilon())
+    r = true_positives / (possible_positives + K.epsilon())
+    f_score = 2 * (p * r) / (p + r + K.epsilon())
+    return f_score
 
 # Hyperparametes
 test_split = 0.3
@@ -18,7 +28,7 @@ model.add(LSTM(256, kernel_initializer='glorot_normal',
 model.add(Dense(1, kernel_initializer='glorot_normal',
                bias_initializer='constant', activation='sigmoid'))
 model.compile(optimizer='adam', loss='binary_crossentropy',
-              metrics=['accuracy'])
+              metrics=[f1_score])
 
 # Extract data
 if 'data.npy' not in os.listdir('.') or 'labels.npy' not in os.listdir('.'):
