@@ -39,7 +39,7 @@ def f1_score_func(actual, pred):
     true_positives = tf.to_float(tf.count_nonzero(pred * actual))
     false_positives = tf.to_float(tf.count_nonzero(pred * (actual - 1)))
     false_negatives = tf.to_float(tf.count_nonzero((pred - 1) * actual))
-    epsilon = tf.constant(1e-5, dtype=tf.float32)
+    epsilon = tf.constant(1e-7, dtype=tf.float32)
     precision = tf.divide(true_positives + epsilon,
                           true_positives + false_positives + epsilon)
     recall = tf.divide(true_positives + epsilon,
@@ -119,6 +119,7 @@ def batch_gen(batch_size, mode):
     for i in range(0, len(input_data), batch_size):
         yield input_data[i:(i + batch_size)], output_labels[i:(i + batch_size)]
 
+saver = tf.train.Saver()
 sess = tf.InteractiveSession()
 tf.global_variables_initializer().run()
 
@@ -141,11 +142,11 @@ for i in range(num_epochs):
         if j % display_every == 0:
             time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
                         train_labels) / batch_size) - (j + 1))
-            sys.stdout.write("\rEpoch: %2d, Loss: %6.4f, F1 Score:%6.4f, "\
+            sys.stdout.write("\rEpoch: %2d, Loss: %6.4f, F1 Score: %6.4f, "\
                              "ETA: %4ds" % (i + 1, total_train_loss / (j + 1),
                              total_train_f1_score / (j + 1), time_left))
             sys.stdout.flush()
-    print "\rEpoch: %2d, Loss: %6.4f, F1 Score:%6.4f, Time Taken: %4ds" % (
+    print "\rEpoch: %2d, Loss: %6.4f, F1 Score: %6.4f, Time Taken: %4ds" % (
           i + 1, total_train_loss / (j + 1), total_train_f1_score / (j + 1),
           time.time() - initial_time)
     if ((prev_loss - total_train_loss) / (j + 1)) < early_stop_threshold:
@@ -154,6 +155,9 @@ for i in range(num_epochs):
             break
     else:
         patience = 0
+print "Saving model..."
+saver.save(sess, './lstm_ad')
+print "Saved model"
 
 total_test_f1_score = 0
 initial_time = time.time()
@@ -166,6 +170,6 @@ for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
         sys.stdout.write("\rTest F1 Score: %6.4f, ETA: %4ds" % (
                          total_test_f1_score / (j + 1), time_left))
         sys.stdout.flush()
-print "\rTest F1 Score:%6.4f%%, Time Taken: %4ds" % (total_test_f1_score / (
+print "\rTest F1 Score: %6.4f%%, Time Taken: %4ds" % (total_test_f1_score / (
       j + 1), time.time() - initial_time)
 
