@@ -4,6 +4,7 @@ import numpy as np
 import os
 import sys
 import time
+import math
 from operator import mul
 
 def weight_variable(shape):
@@ -45,11 +46,28 @@ def dense(x, input_shape, num_neurons):
     #out = tf.where(cond, tf.zeros(tf.shape(x)), tf.ones(tf.shape(x)))
     #return out
 
-def predict_autoenc(x, pred):
-    threshold = tf.Variable(5.0)
-    loss = tf.reduce_mean(tf.square(x - y_pred), axis=-1)
-    cond = tf.less(loss, tf.scalar_mul(threshold, tf.ones(tf.shape(loss))))
-    out = tf.where(cond, tf.zeros(tf.shape(loss)), tf.ones(tf.shape(loss)))
+#def predict_autoenc(x, pred):
+    ##threshold = tf.Variable(5.0)
+    #threshold = tf.constant(5.0)
+    #loss = tf.reduce_mean(tf.square(x - y_pred), axis=-1)
+    #cond = tf.less(loss, tf.scalar_mul(threshold, tf.ones(tf.shape(loss))))
+    #out = tf.where(cond, tf.zeros(tf.shape(loss)), tf.ones(tf.shape(loss)))
+    #return out
+
+def multivariate_normal_diag(x):
+    mean, variance = tf.nn.moments(x, axes=0)
+    #prob = tf.contrib.distributions.MultivariateNormalDiag(mean,
+           #tf.sqrt(variance)).prob(x)
+    prob = tf.reduce_prod((1 / (tf.sqrt(2 * math.pi * variance))) * tf.pow(
+           math.e, -1 * tf.divide(tf.squared_difference(x,
+           mean), 2 * variance)), axis=1)
+    #return tf.pow(math.e, -1 * tf.square(prob))
+    return 1 / (1e-7 + prob)
+
+def predict_ad(prob):
+    threshold = tf.Variable(0.2)
+    cond = tf.less(prob, tf.scalar_mul(threshold, tf.ones([tf.shape(x)[0]])))
+    out = tf.where(cond, tf.zeros(tf.shape(cond)), tf.ones(tf.shape(cond)))
     return out
 
 def f1_score_func(actual, pred):
@@ -71,24 +89,26 @@ lstm = LSTM(x, 3197, 128)
 #y_pred = dense(lstm, [None, 128], 1)
 #y_pred = tf.squeeze(y_pred, axis=-1)
 #y_pred = dense(lstm, [None, 3197], 3197)
-y_pred = dense(lstm, [None, 128], 3197)
+y_pred = multivariate_normal_diag(lstm)
 
-#loss = tf.reduce_mean(tf.square(y_actual - y_pred))
+loss = tf.reduce_mean(tf.square(y_actual - y_pred))
 #loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
                                                               #logits=y_pred))
-loss = tf.reduce_mean(tf.square(x - y_pred))
 
 #prediction = predict(y_pred)
-prediction = predict_autoenc(x, y_pred)
+#prediction = predict_autoenc(x, y_pred)
+prediction = predict_ad(y_pred)
 f1_score = f1_score_func(y_actual, prediction)
-train_step = tf.train.AdamOptimizer().minimize(loss)
+#train_step = tf.train.AdamOptimizer().minimize(loss)
+train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
+                                        use_nesterov=True).minimize(loss)
 
 # Hyperparametes
 test_split = 0.3
-num_epochs = 20
+num_epochs = 10#0
 batch_size = 32
 display_every = 1
-early_stop_threshold = 0.0001
+early_stop_threshold = 100
 early_stop_patience = 5
 
 # Extract data
@@ -193,6 +213,6 @@ for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
         sys.stdout.write("\rTest F1 Score: %6.4f, ETA: %4ds" % (
                          total_test_f1_score / (j + 1), time_left))
         sys.stdout.flush()
-print "\rTest F1 Score: %6.4f%%, Time Taken: %4ds" % (total_test_f1_score / (
+print "\rTest F1 Score: %6.4f, Time Taken: %4ds" % (total_test_f1_score / (
       j + 1), time.time() - initial_time)
 
