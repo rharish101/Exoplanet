@@ -21,6 +21,16 @@ def LSTM(x, time_steps, hidden_nodes):
     outputs, states = tf.contrib.rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
     return outputs[-1]
 
+def LSTMx2(x, time_steps, hidden_nodes_1, hidden_nodes_2):
+    x = tf.reshape(x, [-1, time_steps])
+    x = tf.split(x, time_steps, axis=-1)
+    lstm_cell1 = tf.contrib.rnn.BasicLSTMCell(hidden_nodes_1)
+    lstm_cell2 = tf.contrib.rnn.BasicLSTMCell(hidden_nodes_2)
+    lstm_stacked = tf.contrib.rnn.MultiRNNCell([lstm_cell1, lstm_cell2])
+    outputs, states = tf.contrib.rnn.static_rnn(lstm_stacked, x,
+                                                dtype=tf.float32)
+    return outputs[-1]
+
 def dense(x, input_shape, num_neurons):
     if len(input_shape) > 2:
         flat = tf.reshape(x, [-1, reduce(mul, input_shape[1:], 1)])
@@ -30,9 +40,16 @@ def dense(x, input_shape, num_neurons):
     b = bias_variable([num_neurons])
     return tf.matmul(flat, W) + b
 
-def predict(x):
-    cond = tf.less(x, tf.zeros(tf.shape(x)))
-    out = tf.where(cond, tf.zeros(tf.shape(x)), tf.ones(tf.shape(x)))
+#def predict(x):
+    #cond = tf.less(x, tf.zeros(tf.shape(x)))
+    #out = tf.where(cond, tf.zeros(tf.shape(x)), tf.ones(tf.shape(x)))
+    #return out
+
+def predict_autoenc(x, pred):
+    threshold = tf.Variable(5.0)
+    loss = tf.reduce_mean(tf.square(x - y_pred), axis=-1)
+    cond = tf.less(loss, tf.scalar_mul(threshold, tf.ones(tf.shape(loss))))
+    out = tf.where(cond, tf.zeros(tf.shape(loss)), tf.ones(tf.shape(loss)))
     return out
 
 def f1_score_func(actual, pred):
@@ -50,14 +67,20 @@ def f1_score_func(actual, pred):
 x = tf.placeholder(tf.float32, [None, 3197])
 y_actual = tf.placeholder(tf.float32, [None,])
 lstm = LSTM(x, 3197, 128)
-y_pred = dense(lstm, [None, 128], 1)
-y_pred = tf.squeeze(y_pred, axis=-1)
+#lstm = LSTMx2(x, 3197, 128, 3197)
+#y_pred = dense(lstm, [None, 128], 1)
+#y_pred = tf.squeeze(y_pred, axis=-1)
+#y_pred = dense(lstm, [None, 3197], 3197)
+y_pred = dense(lstm, [None, 128], 3197)
 
 #loss = tf.reduce_mean(tf.square(y_actual - y_pred))
-loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
-                                                              logits=y_pred))
-prediction = predict(y_pred)
-f1_score = f1_score_func(y_actual, y_pred)
+#loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
+                                                              #logits=y_pred))
+loss = tf.reduce_mean(tf.square(x - y_pred))
+
+#prediction = predict(y_pred)
+prediction = predict_autoenc(x, y_pred)
+f1_score = f1_score_func(y_actual, prediction)
 train_step = tf.train.AdamOptimizer().minimize(loss)
 
 # Hyperparametes
