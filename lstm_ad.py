@@ -84,14 +84,15 @@ def f1_score_func(actual, pred):
 
 x = tf.placeholder(tf.float32, [None, 3197])
 y_actual = tf.placeholder(tf.float32, [None,])
-lstm = LSTM(x, 3197, 128)
+#lstm = LSTM(x, 3197, 128)
 #lstm = LSTMx2(x, 3197, 128, 3197)
 #y_pred = dense(lstm, [None, 128], 1)
 #y_pred = tf.squeeze(y_pred, axis=-1)
 #y_pred = dense(lstm, [None, 3197], 3197)
-y_pred = multivariate_normal_diag(lstm)
+#y_pred = multivariate_normal_diag(lstm)
+y_pred = multivariate_normal_diag(x)
 
-loss = tf.reduce_mean(tf.square(y_actual - y_pred))
+loss = tf.reduce_mean(tf.square(y_actual - prediction))
 #loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
                                                               #logits=y_pred))
 
@@ -198,9 +199,6 @@ for i in range(num_epochs):
             break
     else:
         patience = 0
-print "Saving model..."
-saver.save(sess, './lstm_ad')
-print "Saved model"
 
 total_test_f1_score = 0
 initial_time = time.time()
@@ -215,4 +213,9 @@ for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
         sys.stdout.flush()
 print "\rTest F1 Score: %6.4f, Time Taken: %4ds" % (total_test_f1_score / (
       j + 1), time.time() - initial_time)
+
+response = raw_input("Do you want to save this model? (Y/n): ")
+if response.lower() not in ['n', 'no', 'nah', 'nein', 'nahi', 'nope']:
+    saver.save(sess, './lstm_ad')
+    print "Saved model"
 
