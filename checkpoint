@@ -1,2 +1,2 @@
-model_checkpoint_path: "lstm_ad"
-all_model_checkpoint_paths: "lstm_ad"
+model_checkpoint_path: "anomaly_detect"
+all_model_checkpoint_paths: "anomaly_detect"
