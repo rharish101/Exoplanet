@@ -8,6 +8,9 @@ import math
 from operator import mul
 from extract import *
 
+# Hyperparameters
+anomaly_threshold = 5.0
+
 def weight_variable(shape):
     initial = tf.contrib.layers.xavier_initializer()(shape)
     return tf.Variable(initial)
@@ -65,8 +68,8 @@ def multivariate_normal_diag(x):
     return tf.pow(math.e, -1 * tf.square(prob))
     #return 1 / (1e-7 + prob)
 
-def predict_ad(prob):
-    threshold = tf.constant(5.0)
+def predict_ad(prob, threshold):
+    threshold = tf.constant(threshold)
     cond = tf.less(prob, tf.scalar_mul(threshold, tf.ones([tf.shape(x)[0]])))
     out = tf.where(cond, tf.zeros(tf.shape(cond)), tf.ones(tf.shape(cond)))
     return out
@@ -98,26 +101,16 @@ loss = tf.reduce_mean(tf.square(y_actual - y_pred))
 
 #prediction = predict(y_pred)
 #prediction = predict_autoenc(x, y_pred)
-prediction = predict_ad(y_pred)
+prediction = predict_ad(y_pred, anomaly_threshold)
 f1_score = f1_score_func(y_actual, prediction)
 #train_step = tf.train.AdamOptimizer().minimize(loss)
 train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
                                         use_nesterov=True).minimize(loss)
 
-# Hyperparametes
-test_split = 0.3
-num_epochs = 10#0
-batch_size = 32
-display_every = 1
-early_stop_threshold = 100
-early_stop_patience = 5
-program_name = 'anomaly_detect'
-
 # Train the model
 def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
                 batch_size=32, display_every=1, early_stop_threshold=0.01,
                 early_stop_patience=5):
-    # Extract data
     if data_tup is None:
         train_data, train_labels, test_data, test_labels = split_data(
                                                            test_split=test_split)
@@ -195,20 +188,22 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
     # Saving model
     response = raw_input("Do you want to save this model? (Y/n): ")
     if response.lower() not in ['n', 'no', 'nah', 'nein', 'nahi', 'nope']:
-        saver.save(sess, './' + program_name)
+        saver.save(sess, './' + os.path.basename(__file__)[:-3])
         print "Saved model"
 
 # Predict with the model
 def predict_model(data, labels, sess=None, batch_size=32, display_every=1):
     if sess is None:
         sess = tf.InteractiveSession()
-        saver = tf.train.import_meta_graph(program_name + '.meta')
+        saver = tf.train.import_meta_graph(
+                    os.path.basename(__file__)[:-3] + '.meta')
         saver.restore(sess, tf.train.latest_checkpoint('./'))
 
     def batch_gen(batch_size):
         for i in range(0, len(data), batch_size):
             yield data[i:(i + batch_size)], labels[i:(i + batch_size)]
 
+    # Generate predictions
     total_f1_score = 0
     initial_time = time.time()
     results = []
