@@ -8,9 +8,6 @@ import math
 from operator import mul
 from extract import *
 
-# Hyperparameters
-anomaly_threshold = 5.0
-
 def weight_variable(shape):
     initial = tf.contrib.layers.xavier_initializer()(shape)
     return tf.Variable(initial)
@@ -69,7 +66,6 @@ def multivariate_normal_diag(x):
     #return 1 / (1e-7 + prob)
 
 def predict_ad(prob, threshold):
-    threshold = tf.constant(threshold)
     cond = tf.less(prob, tf.scalar_mul(threshold, tf.ones([tf.shape(x)[0]])))
     out = tf.where(cond, tf.zeros(tf.shape(cond)), tf.ones(tf.shape(cond)))
     return out
@@ -99,9 +95,10 @@ loss = tf.reduce_mean(tf.square(y_actual - y_pred))
 #loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
                                                               #logits=y_pred))
 
+threshold = tf.placeholder(tf.float32, [])
 #prediction = predict(y_pred)
 #prediction = predict_autoenc(x, y_pred)
-prediction = predict_ad(y_pred, anomaly_threshold)
+prediction = predict_ad(y_pred, threshold)
 f1_score = f1_score_func(y_actual, prediction)
 #train_step = tf.train.AdamOptimizer().minimize(loss)
 train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
@@ -109,8 +106,8 @@ train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
 
 # Train the model
 def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
-                batch_size=32, display_every=1, early_stop_threshold=0.01,
-                early_stop_patience=5):
+                batch_size=32, anomaly_threshold=5.0, display_every=1,
+                early_stop_threshold=0.01, early_stop_patience=5):
     if data_tup is None:
         train_data, train_labels, test_data, test_labels = split_data(
                                                            test_split=test_split)
@@ -149,8 +146,8 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
         for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, 
                                                         mode='train')):
             train_loss, train_f1s, _ = sess.run([loss, f1_score, train_step],
-                                                feed_dict={x:batch_x,
-                                                y_actual:batch_y})
+                                       feed_dict={x:batch_x, y_actual:batch_y,
+                                       threshold:anomaly_threshold})
             total_train_loss += train_loss
             total_train_f1_score += train_f1s
             if j % display_every == 0:
@@ -174,7 +171,8 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
     total_test_f1_score = 0
     initial_time = time.time()
     for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
-        test_f1s = sess.run(f1_score, feed_dict={x:batch_x, y_actual:batch_y})
+        test_f1s = sess.run(f1_score, feed_dict={x:batch_x, y_actual:batch_y,
+                            threshold:anomaly_threshold})
         total_test_f1_score += test_f1s
         if j % display_every == 0:
             time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
@@ -192,7 +190,8 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
         print "Saved model"
 
 # Predict with the model
-def predict_model(data, labels, sess=None, batch_size=32, display_every=1):
+def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
+                  batch_size=32, display_every=1):
     if sess is None:
         sess = tf.InteractiveSession()
         saver = tf.train.import_meta_graph(
@@ -209,7 +208,7 @@ def predict_model(data, labels, sess=None, batch_size=32, display_every=1):
     results = []
     for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size)):
         f1s, pred = sess.run([f1_score, prediction], feed_dict={x:batch_x,
-                             y_actual:batch_y})
+                    y_actual:batch_y, threshold:anomaly_threshold})
         total_f1_score += f1s
         results += pred.tolist()
         if j % display_every == 0:
