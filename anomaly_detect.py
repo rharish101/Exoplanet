@@ -90,12 +90,13 @@ def f1_score_func(actual, pred):
 
 x = tf.placeholder(tf.float32, [None, 3197])
 y_actual = tf.placeholder(tf.float32, [None,])
-#lstm = LSTM(x, 3197, 128)
+lstm = LSTM(x, 3197, 128)
 #lstm = LSTMx2(x, 3197, 128, 3197)
-#y_pred = tf.squeeze(y_pred, axis=-1)
-y_pred = dense(x, [None, 3197], 128)
+#y_pred = tf.squeeze(lstm, axis=-1)
+#y_pred = dense(x, [None, 3197], 128)
 #y_pred = multivariate_normal_diag(lstm)
-y_pred = multivariate_normal_diag(y_pred)
+#y_pred = multivariate_normal_diag(y_pred)
+y_pred = multivariate_normal_diag(lstm)
 
 #loss = tf.reduce_mean(tf.square(y_actual - y_pred))
 loss = tf.reduce_mean(tf.square(y_actual - tf.pow(math.e,
