@@ -31,11 +31,21 @@ def shuffle_data(data=None, labels=None):
     labels = combined.T[-1].T
     return data, labels
 
-def split_data(data=None, labels=None, shuffle=True):
+def normalize_data(data=None):
+    if data is None:
+        data, labels = extract_data()
+    data = (data - np.mean(data, -1, keepdims=True)) / np.std(data, -1,
+                                                              keepdims=True)
+    return data
+
+def split_data(data=None, labels=None, test_split=0.3, normalize=False,
+               shuffle=True):
     if data is None or labels is None:
         data, labels = extract_data()
     if shuffle:
         data, labels = shuffle_data(data, labels)
+    if normalize:
+        data = normalize_data(data)
     train_data = data[:-int(len(data) * test_split)]
     train_labels = labels[:-int(len(labels) * test_split)]
     test_data = data[-int(len(data) * test_split):]

@@ -6,6 +6,7 @@ import sys
 import time
 import math
 from operator import mul
+from extract import *
 
 def weight_variable(shape):
     initial = tf.contrib.layers.xavier_initializer()(shape)
@@ -112,43 +113,9 @@ display_every = 1
 early_stop_threshold = 100
 early_stop_patience = 5
 
-# Extract data
-if 'data.npy' not in os.listdir('.') or 'labels.npy' not in os.listdir('.'):
-    if 'ExoTrain.csv' in os.listdir('.'):
-        csv = open('ExoTrain.csv', 'r')
-    else:
-        print "Dataset missing"
-        exit()
-    print "Reading dataset..."
-    csv_data = csv.read()
-    csv.close()
-    data = np.array([vec.split(',')[1:] for vec in csv_data.split(
-                        '\r\n')[1:-1]]).astype(np.float32)
-    labels = np.array([int(vec.split(',')[0]) - 1 for vec in\
-                             csv_data.split('\r\n')[1:-1]])
-    np.save(open('data.npy', 'w'), data)
-    np.save(open('labels.npy', 'w'), labels)
-else:
-    print "Loading dataset..."
-    data = np.load(open('data.npy', 'r'))
-    labels = np.load(open('labels.npy', 'r'))
-print "Data loaded"
-
-# Normalize data
-#data = (data - np.mean(data, -1, keepdims=True)) / np.std(data, -1,
-                                                          #keepdims=True)
-
-# Shuffle data
-combined = np.column_stack((data, labels))
-np.random.shuffle(combined)
-data = combined.T[:-1].T
-labels = combined.T[-1].T
-
-# Split dataset
-train_data = data[:-int(len(data) * test_split)]
-train_labels = labels[:-int(len(labels) * test_split)]
-test_data = data[-int(len(data) * test_split):]
-test_labels = labels[-int(len(labels) * test_split):]
+# Extract, shuffle and split data
+train_data, train_labels, test_data, test_labels = split_data(
+                                                       test_split=test_split)
 
 def batch_gen(batch_size, mode):
     if mode == 'train':

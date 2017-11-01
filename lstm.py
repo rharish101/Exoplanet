@@ -6,6 +6,7 @@ from keras.callbacks import EarlyStopping
 import keras.backend as K
 import numpy as np
 import os
+from extract import *
 
 def f1_score(y_true, y_pred):
     true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
@@ -30,41 +31,11 @@ model.add(Dense(1, kernel_initializer='glorot_normal',
 model.compile(optimizer='adam', loss='binary_crossentropy',
               metrics=[f1_score])
 
-# Extract data
-if 'data.npy' not in os.listdir('.') or 'labels.npy' not in os.listdir('.'):
-    if 'ExoTrain.csv' in os.listdir('.'):
-        csv = open('ExoTrain.csv', 'r')
-    else:
-        print "Dataset missing"
-        exit()
-    csv_data = csv.read()
-    csv.close()
-    data = np.array([vec.split(',')[1:] for vec in csv_data.split(
-                        '\r\n')[1:-1]]).astype(np.float32)
-    labels = np.array([int(vec.split(',')[0]) - 1 for vec in\
-                             csv_data.split('\r\n')[1:-1]])
-    np.save(open('data.npy', 'w'), data)
-    np.save(open('labels.npy', 'w'), labels)
-else:
-    data = np.load(open('data.npy', 'r'))
-    labels = np.load(open('labels.npy', 'r'))
-
-# Normalize data
-data = (data - np.mean(data, -1, keepdims=True)) / np.std(data, -1,
-                                                          keepdims=True)
-
-# Shuffle data
-combined = np.column_stack((data, labels))
-np.random.shuffle(combined)
-data = combined.T[:-1].T
-labels = combined.T[-1].T
-data = np.reshape(data, (-1, 3197, 1))
-
-# Split dataset
-train_data = data[:-int(len(data) * test_split)]
-train_labels = labels[:-int(len(labels) * test_split)]
-test_data = data[-int(len(data) * test_split):]
-test_labels = labels[-int(len(labels) * test_split):]
+# Extract, shuffle, normalize and split data
+train_data, train_labels, test_data, test_labels = split_data(normalize=True,
+                                                       test_split=test_split)
+train_data = np.expand_dims(train_data, axis=-1)
+test_data = np.expand_dims(test_data, axis=-1)
 
 # Train and evaluate
 early_stop = EarlyStopping(monitor='loss', min_delta=1e-4, patience=3)
