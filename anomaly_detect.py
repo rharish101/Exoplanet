@@ -8,6 +8,8 @@ import math
 from operator import mul
 from extract import *
 
+program_name = 'anomaly_detect'
+
 def weight_variable(shape):
     initial = tf.contrib.layers.xavier_initializer()(shape)
     return tf.Variable(initial)
@@ -62,11 +64,15 @@ def multivariate_normal_diag(x):
     prob = tf.reduce_prod((1 / (tf.sqrt(2 * math.pi * variance))) * tf.pow(
            math.e, -1 * tf.divide(tf.squared_difference(x,
            mean), 2 * variance)), axis=1)
-    return tf.pow(math.e, -1 * tf.square(prob))
+    return prob
+    #return tf.pow(math.e, -1 * tf.square(prob))
     #return 1 / (1e-7 + prob)
 
 def predict_ad(prob, threshold):
-    cond = tf.less(prob, tf.scalar_mul(threshold, tf.ones([tf.shape(x)[0]])))
+    #cond = tf.less(prob, tf.scalar_mul(threshold,
+                                          #tf.ones([tf.shape(prob)[0]])))
+    cond = tf.greater(prob, tf.scalar_mul(threshold,
+                                          tf.ones([tf.shape(prob)[0]])))
     out = tf.where(cond, tf.zeros(tf.shape(cond)), tf.ones(tf.shape(cond)))
     return out
 
@@ -91,7 +97,9 @@ y_pred = dense(x, [None, 3197], 128)
 #y_pred = multivariate_normal_diag(lstm)
 y_pred = multivariate_normal_diag(y_pred)
 
-loss = tf.reduce_mean(tf.square(y_actual - y_pred))
+#loss = tf.reduce_mean(tf.square(y_actual - y_pred))
+loss = tf.reduce_mean(tf.square(y_actual - tf.pow(math.e,
+                                                  -1 * tf.square(y_pred))))
 #loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
                                                               #logits=y_pred))
 
@@ -186,7 +194,7 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
     # Saving model
     response = raw_input("Do you want to save this model? (Y/n): ")
     if response.lower() not in ['n', 'no', 'nah', 'nein', 'nahi', 'nope']:
-        saver.save(sess, './' + os.path.basename(__file__)[:-3])
+        saver.save(sess, './' + program_name)
         print "Saved model"
 
 # Predict with the model
@@ -194,8 +202,7 @@ def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
                   batch_size=32, display_every=1):
     if sess is None:
         sess = tf.InteractiveSession()
-        saver = tf.train.import_meta_graph(
-                    os.path.basename(__file__)[:-3] + '.meta')
+        saver = tf.train.import_meta_graph(program_name + '.meta')
         saver.restore(sess, tf.train.latest_checkpoint('./'))
 
     def batch_gen(batch_size):
