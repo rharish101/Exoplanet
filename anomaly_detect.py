@@ -52,12 +52,12 @@ def multivariate_normal_diag(x):
           math.e, -1 * tf.divide(tf.squared_difference(x, mean),
           2 * variance)), axis=1)
     return pdf
-    #return tf.pow(math.e, -1 * tf.square(prob))
-    #return 1 / (1e-7 + prob)
 
 def beta_dist(x, features):
-    alpha = tf.Variable(2.0 * tf.ones([features]))
-    beta = tf.Variable(2.0 * tf.ones([features]))
+    alpha = tf.Variable(tf.random_uniform([features], minval=0, maxval=2))
+    #alpha = tf.Variable(2.0 * tf.ones([features]))
+    beta = tf.Variable(tf.random_uniform([features], minval=0, maxval=2))
+    #beta = tf.Variable(2.0 * tf.ones([features]))
     beta_dist = tf.contrib.distributions.Beta(alpha, beta)
     return tf.reduce_mean(beta_dist.prob(x), axis=-1)
 
@@ -138,56 +138,59 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
         sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    # Training model
-    for i in range(num_epochs):
-        if i == 0:
-            patience = 0
-            prev_loss = 0
-        else:
-            prev_loss = total_train_loss
-        total_train_loss = 0
-        total_train_f1_score = 0
+    # Training and testing model
+    try:
+        for i in range(num_epochs):
+            if i == 0:
+                patience = 0
+                prev_loss = 0
+            else:
+                prev_loss = total_train_loss
+            total_train_loss = 0
+            total_train_f1_score = 0
+            initial_time = time.time()
+            for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, 
+                                                            mode='train')):
+                train_loss, train_f1s, _ = sess.run([loss, f1_score, train_step],
+                                        feed_dict={x:batch_x, y_actual:batch_y,
+                                        threshold:anomaly_threshold,
+                                        pos_weight:loss_weight})
+                total_train_loss += train_loss
+                total_train_f1_score += train_f1s
+                if j % display_every == 0:
+                    time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
+                                train_labels) / batch_size) - (j + 1))
+                    sys.stdout.write("\rEpoch: %2d, Loss: %6.4f, F1 Score: %6.4f, "\
+                                    "ETA: %4ds" % (i + 1, total_train_loss / (j + 1),
+                                    total_train_f1_score / (j + 1), time_left))
+                    sys.stdout.flush()
+            print "\rEpoch: %2d, Loss: %6.4f, F1 Score: %6.4f, Time Taken: %4ds" % (
+                i + 1, total_train_loss / (j + 1), total_train_f1_score / (j + 1),
+                time.time() - initial_time)
+            if ((prev_loss - total_train_loss) / (j + 1)) < early_stop_threshold:
+                patience += 1
+                if patience >= early_stop_patience:
+                    break
+            else:
+                patience = 0
+
+        # Test results
+        total_test_f1_score = 0
         initial_time = time.time()
-        for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, 
-                                                        mode='train')):
-            train_loss, train_f1s, _ = sess.run([loss, f1_score, train_step],
-                                       feed_dict={x:batch_x, y_actual:batch_y,
-                                       threshold:anomaly_threshold,
-                                       pos_weight:loss_weight})
-            total_train_loss += train_loss
-            total_train_f1_score += train_f1s
+        for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
+            test_f1s = sess.run(f1_score, feed_dict={x:batch_x, y_actual:batch_y,
+                            threshold:anomaly_threshold, pos_weight:loss_weight})
+            total_test_f1_score += test_f1s
             if j % display_every == 0:
                 time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
-                            train_labels) / batch_size) - (j + 1))
-                sys.stdout.write("\rEpoch: %2d, Loss: %6.4f, F1 Score: %6.4f, "\
-                                "ETA: %4ds" % (i + 1, total_train_loss / (j + 1),
-                                total_train_f1_score / (j + 1), time_left))
+                            test_labels) / batch_size) - (j + 1))
+                sys.stdout.write("\rTest F1 Score: %6.4f, ETA: %4ds" % (
+                                total_test_f1_score / (j + 1), time_left))
                 sys.stdout.flush()
-        print "\rEpoch: %2d, Loss: %6.4f, F1 Score: %6.4f, Time Taken: %4ds" % (
-            i + 1, total_train_loss / (j + 1), total_train_f1_score / (j + 1),
-            time.time() - initial_time)
-        if ((prev_loss - total_train_loss) / (j + 1)) < early_stop_threshold:
-            patience += 1
-            if patience >= early_stop_patience:
-                break
-        else:
-            patience = 0
-
-    # Test results
-    total_test_f1_score = 0
-    initial_time = time.time()
-    for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
-        test_f1s = sess.run(f1_score, feed_dict={x:batch_x, y_actual:batch_y,
-                        threshold:anomaly_threshold, pos_weight:loss_weight})
-        total_test_f1_score += test_f1s
-        if j % display_every == 0:
-            time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
-                        test_labels) / batch_size) - (j + 1))
-            sys.stdout.write("\rTest F1 Score: %6.4f, ETA: %4ds" % (
-                            total_test_f1_score / (j + 1), time_left))
-            sys.stdout.flush()
-    print "\rTest F1 Score: %6.4f, Time Taken: %4ds" % (total_test_f1_score / (
-        j + 1), time.time() - initial_time)
+        print "\rTest F1 Score: %6.4f, Time Taken: %4ds" % (total_test_f1_score / (
+            j + 1), time.time() - initial_time)
+    except KeyboardInterrupt:
+        pass
 
     # Saving model
     response = raw_input("Do you want to save this model? (Y/n): ")
@@ -197,9 +200,10 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
 
 # Predict with the model
 def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
-                  batch_size=32, loss_weight=10, display_every=1):
+                  batch_size=32, display_every=1):
     if sess is None:
         sess = tf.InteractiveSession()
+        print "Loading model..."
         saver = tf.train.import_meta_graph(program_name + '.meta')
         saver.restore(sess, tf.train.latest_checkpoint('./'))
         print "Restored model"
@@ -214,8 +218,7 @@ def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
     results = []
     for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size)):
         f1s, pred = sess.run([f1_score, prediction], feed_dict={x:batch_x,
-                    y_actual:batch_y, threshold:anomaly_threshold,
-                    pos_weight:loss_weight})
+                    y_actual:batch_y, threshold:anomaly_threshold})
         total_f1_score += f1s
         results += pred.tolist()
         if j % display_every == 0:
@@ -230,5 +233,5 @@ def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
     return np.array(results)
 
 if __name__ == '__main__':
-    train_model(num_epochs=10)
+    train_model(num_epochs=100, anomaly_threshold=2.5)
 
