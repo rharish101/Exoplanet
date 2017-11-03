@@ -108,11 +108,13 @@ f1_score = f1_score_func(y_actual, prediction)
 train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
                                         use_nesterov=True).minimize(loss)
 
+global_sess = None
+
 # Train the model
 def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
                 batch_size=32, loss_weight=10, anomaly_threshold=5.0,
-                display_every=1, early_stop_threshold=0.01,
-                early_stop_patience=5):
+                early_stop_threshold=0.01, early_stop_patience=5,
+                display_every=1):
     if data_tup is None:
         train_data, train_labels, test_data, test_labels = split_data(
                                                            test_split=test_split)
@@ -190,7 +192,7 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
         print "\rTest F1 Score: %6.4f, Time Taken: %4ds" % (total_test_f1_score / (
             j + 1), time.time() - initial_time)
     except KeyboardInterrupt:
-        pass
+        print ''
 
     # Saving model
     response = raw_input("Do you want to save this model? (Y/n): ")
@@ -198,15 +200,22 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
         saver.save(sess, './' + program_name)
         print "Saved model"
 
+    global global_sess
+    global_sess = sess
+
 # Predict with the model
-def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
-                  batch_size=32, display_every=1):
+def predict_model(data, labels, sess=None, import_model=True,
+                  anomaly_threshold=5.0, batch_size=32, display_every=1):
+    global global_sess
     if sess is None:
-        sess = tf.InteractiveSession()
-        print "Loading model..."
-        saver = tf.train.import_meta_graph(program_name + '.meta')
-        saver.restore(sess, tf.train.latest_checkpoint('./'))
-        print "Restored model"
+        if not import_model and global_sess is not None:
+            sess = global_sess
+        else:
+            sess = tf.InteractiveSession()
+            print "Loading model..."
+            saver = tf.train.import_meta_graph(program_name + '.meta')
+            saver.restore(sess, tf.train.latest_checkpoint('./'))
+            print "Restored model"
 
     def batch_gen(batch_size):
         for i in range(0, len(data), batch_size):
@@ -230,8 +239,11 @@ def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
     print "\rF1 Score: %6.4f, Time Taken: %4ds" % (total_f1_score / (j + 1),
                                                    time.time() - initial_time)
 
+    if not import_model and global_sess is None:
+        global_sess = sess
+
     return np.array(results)
 
 if __name__ == '__main__':
-    train_model(num_epochs=100, anomaly_threshold=2.5)
+    train_model(anomaly_threshold=2.25)
 
