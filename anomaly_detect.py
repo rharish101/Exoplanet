@@ -44,29 +44,22 @@ def dense(x, input_shape, num_neurons):
     b = bias_variable([num_neurons])
     return tf.matmul(flat, W) + b
 
-#def predict(x):
-    #cond = tf.less(x, tf.zeros(tf.shape(x)))
-    #out = tf.where(cond, tf.zeros(tf.shape(x)), tf.ones(tf.shape(x)))
-    #return out
-
-#def predict_autoenc(x, pred):
-    ##threshold = tf.Variable(5.0)
-    #threshold = tf.constant(5.0)
-    #loss = tf.reduce_mean(tf.square(x - y_pred), axis=-1)
-    #cond = tf.less(loss, tf.scalar_mul(threshold, tf.ones(tf.shape(loss))))
-    #out = tf.where(cond, tf.zeros(tf.shape(loss)), tf.ones(tf.shape(loss)))
-    #return out
-
 def multivariate_normal_diag(x):
     mean, variance = tf.nn.moments(x, axes=0)
     #prob = tf.contrib.distributions.MultivariateNormalDiag(mean,
            #tf.sqrt(variance)).prob(x)
-    prob = tf.reduce_prod((1 / (tf.sqrt(2 * math.pi * variance))) * tf.pow(
-           math.e, -1 * tf.divide(tf.squared_difference(x,
-           mean), 2 * variance)), axis=1)
-    return prob
+    pdf = tf.reduce_prod((1 / (tf.sqrt(2 * math.pi * variance))) * tf.pow(
+          math.e, -1 * tf.divide(tf.squared_difference(x, mean),
+          2 * variance)), axis=1)
+    return pdf
     #return tf.pow(math.e, -1 * tf.square(prob))
     #return 1 / (1e-7 + prob)
+
+def beta_dist(x, features):
+    alpha = tf.Variable(2.0 * tf.ones([features]))
+    beta = tf.Variable(2.0 * tf.ones([features]))
+    beta_dist = tf.contrib.distributions.Beta(alpha, beta)
+    return tf.reduce_mean(beta_dist.prob(x), axis=-1)
 
 def predict_ad(prob, threshold):
     #cond = tf.less(prob, tf.scalar_mul(threshold,
@@ -96,13 +89,15 @@ lstm = LSTM(x, 3197, 128)
 #y_pred = dense(x, [None, 3197], 128)
 #y_pred = multivariate_normal_diag(lstm)
 #y_pred = multivariate_normal_diag(y_pred)
-y_pred = multivariate_normal_diag(lstm)
+#y_pred = multivariate_normal_diag(lstm)
+y_pred = beta_dist(tf.nn.sigmoid(lstm), 128)
 
 #loss = tf.reduce_mean(tf.square(y_actual - y_pred))
-loss = tf.reduce_mean(tf.square(y_actual - tf.pow(math.e,
-                                                  -1 * tf.square(y_pred))))
-#loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_actual,
-                                                              #logits=y_pred))
+#loss = tf.reduce_mean(tf.square(y_actual - tf.pow(math.e,
+                                                  #-1 * tf.square(y_pred))))
+pos_weight = tf.placeholder(tf.float32, [])
+loss = tf.reduce_sum(tf.nn.weighted_cross_entropy_with_logits(targets=y_actual,
+                     logits=1/y_pred, pos_weight=pos_weight))
 
 threshold = tf.placeholder(tf.float32, [])
 #prediction = predict(y_pred)
@@ -115,8 +110,9 @@ train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
 
 # Train the model
 def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
-                batch_size=32, anomaly_threshold=5.0, display_every=1,
-                early_stop_threshold=0.01, early_stop_patience=5):
+                batch_size=32, loss_weight=10, anomaly_threshold=5.0,
+                display_every=1, early_stop_threshold=0.01,
+                early_stop_patience=5):
     if data_tup is None:
         train_data, train_labels, test_data, test_labels = split_data(
                                                            test_split=test_split)
@@ -156,7 +152,8 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
                                                         mode='train')):
             train_loss, train_f1s, _ = sess.run([loss, f1_score, train_step],
                                        feed_dict={x:batch_x, y_actual:batch_y,
-                                       threshold:anomaly_threshold})
+                                       threshold:anomaly_threshold,
+                                       pos_weight:loss_weight})
             total_train_loss += train_loss
             total_train_f1_score += train_f1s
             if j % display_every == 0:
@@ -181,7 +178,7 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
     initial_time = time.time()
     for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size, mode='test')):
         test_f1s = sess.run(f1_score, feed_dict={x:batch_x, y_actual:batch_y,
-                            threshold:anomaly_threshold})
+                        threshold:anomaly_threshold, pos_weight:loss_weight})
         total_test_f1_score += test_f1s
         if j % display_every == 0:
             time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
@@ -200,11 +197,12 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
 
 # Predict with the model
 def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
-                  batch_size=32, display_every=1):
+                  batch_size=32, loss_weight=10, display_every=1):
     if sess is None:
         sess = tf.InteractiveSession()
         saver = tf.train.import_meta_graph(program_name + '.meta')
         saver.restore(sess, tf.train.latest_checkpoint('./'))
+        print "Restored model"
 
     def batch_gen(batch_size):
         for i in range(0, len(data), batch_size):
@@ -216,7 +214,8 @@ def predict_model(data, labels, sess=None, anomaly_threshold=5.0,
     results = []
     for j, (batch_x, batch_y) in enumerate(batch_gen(batch_size)):
         f1s, pred = sess.run([f1_score, prediction], feed_dict={x:batch_x,
-                    y_actual:batch_y, threshold:anomaly_threshold})
+                    y_actual:batch_y, threshold:anomaly_threshold,
+                    pos_weight:loss_weight})
         total_f1_score += f1s
         results += pred.tolist()
         if j % display_every == 0:
