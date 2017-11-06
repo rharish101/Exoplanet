@@ -10,14 +10,17 @@ from extract import *
 
 program_name = 'anomaly_detect'
 
+# Creates weights with the Xavier initializer
 def weight_variable(shape):
     initial = tf.contrib.layers.xavier_initializer()(shape)
     return tf.Variable(initial)
 
+# Creates biases with the Xavier initializer
 def bias_variable(shape):
     initial = tf.contrib.layers.xavier_initializer()(shape)
     return tf.Variable(initial)
 
+# Creates an LSTM layer
 def LSTM(x, time_steps, hidden_nodes):
     x = tf.reshape(x, [-1, time_steps])
     x = tf.split(x, time_steps, axis=-1)
@@ -25,6 +28,7 @@ def LSTM(x, time_steps, hidden_nodes):
     outputs, states = tf.contrib.rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
     return outputs[-1]
 
+# Creates two stacked LSTM layers
 def LSTMx2(x, time_steps, hidden_nodes_1, hidden_nodes_2):
     x = tf.reshape(x, [-1, time_steps])
     x = tf.split(x, time_steps, axis=-1)
@@ -35,6 +39,7 @@ def LSTMx2(x, time_steps, hidden_nodes_1, hidden_nodes_2):
                                                 dtype=tf.float32)
     return outputs[-1]
 
+# Creates a fully-connected linear layer
 def dense(x, input_shape, num_neurons):
     if len(input_shape) > 2:
         flat = tf.reshape(x, [-1, reduce(mul, input_shape[1:], 1)])
@@ -44,6 +49,7 @@ def dense(x, input_shape, num_neurons):
     b = bias_variable([num_neurons])
     return tf.matmul(flat, W) + b
 
+# Returns the probability density function for a normal distribution
 def multivariate_normal_diag(x):
     mean, variance = tf.nn.moments(x, axes=0)
     #prob = tf.contrib.distributions.MultivariateNormalDiag(mean,
@@ -53,6 +59,7 @@ def multivariate_normal_diag(x):
           2 * variance)), axis=1)
     return pdf
 
+# Returns the probability density function for a beta distribution
 def beta_dist(x, features):
     alpha = tf.Variable(tf.random_uniform([features], minval=0, maxval=2))
     #alpha = tf.Variable(2.0 * tf.ones([features]))
@@ -61,6 +68,7 @@ def beta_dist(x, features):
     beta_dist = tf.contrib.distributions.Beta(alpha, beta)
     return tf.reduce_mean(beta_dist.prob(x), axis=-1)
 
+# Predicts classes w.r.t the threshold, using the probability density function
 def predict_ad(prob, threshold):
     #cond = tf.less(prob, tf.scalar_mul(threshold,
                                           #tf.ones([tf.shape(prob)[0]])))
@@ -69,6 +77,7 @@ def predict_ad(prob, threshold):
     out = tf.where(cond, tf.zeros(tf.shape(cond)), tf.ones(tf.shape(cond)))
     return out
 
+# Calculates the F1 score
 def f1_score_func(actual, pred):
     true_positives = tf.to_float(tf.count_nonzero(pred * actual))
     false_positives = tf.to_float(tf.count_nonzero(pred * (actual - 1)))
@@ -108,14 +117,14 @@ f1_score = f1_score_func(y_actual, prediction)
 train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
                                         use_nesterov=True).minimize(loss)
 
-global_sess = None
-
 # Train the model
-def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
+def train_model(train_data=None, train_labels=None, test_data=None,
+                test_labels=None, sess=None, test_split=0.3, num_epochs=100,
                 batch_size=32, loss_weight=10, anomaly_threshold=5.0,
                 early_stop_threshold=0.01, early_stop_patience=5,
-                display_every=1):
-    if data_tup is None:
+                import_model=False, display_every=1):
+    if train_data is None or train_labels is None or test_data is None or\
+    test_labels is None:
         train_data, train_labels, test_data, test_labels = split_data(
                                                            test_split=test_split)
     else:
@@ -137,8 +146,16 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
     # Session and saver initialize
     saver = tf.train.Saver()
     if sess is None:
-        sess = tf.InteractiveSession()
+        if tf.get_default_session() is not None:
+            sess = tf.get_default_session()
+        else:
+            sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
+    if import_model:
+        print "Loading model..."
+        saver = tf.train.import_meta_graph(program_name + '.meta')
+        saver.restore(sess, tf.train.latest_checkpoint('./'))
+        print "Restored model"
 
     # Training and testing model
     try:
@@ -200,18 +217,19 @@ def train_model(data_tup=None, sess=None, test_split=0.3, num_epochs=100,
         saver.save(sess, './' + program_name)
         print "Saved model"
 
-    global global_sess
-    global_sess = sess
-
 # Predict with the model
-def predict_model(data, labels, sess=None, import_model=True,
+def predict_model(data, labels, sess=None, import_model=False,
                   anomaly_threshold=5.0, batch_size=32, display_every=1):
-    global global_sess
+    default_sess_flag = tf.get_default_session() is not None
     if sess is None:
-        if not import_model and global_sess is not None:
-            sess = global_sess
+        if not import_model and default_sess_flag:
+            sess = tf.get_default_session()
         else:
-            sess = tf.InteractiveSession()
+            if import_model and default_sess_flag:
+                sess = tf.Session()
+            else:
+                sess = tf.InteractiveSession()
+            sess.run(tf.global_variables_initializer())
             print "Loading model..."
             saver = tf.train.import_meta_graph(program_name + '.meta')
             saver.restore(sess, tf.train.latest_checkpoint('./'))
@@ -239,11 +257,11 @@ def predict_model(data, labels, sess=None, import_model=True,
     print "\rF1 Score: %6.4f, Time Taken: %4ds" % (total_f1_score / (j + 1),
                                                    time.time() - initial_time)
 
-    if not import_model and global_sess is None:
-        global_sess = sess
+    if import_model and default_sess_flag:
+        sess.close()
 
     return np.array(results)
 
 if __name__ == '__main__':
-    train_model(anomaly_threshold=2.25)
+    train_model(anomaly_threshold=2.5, loss_weight=3)
 
