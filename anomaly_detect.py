@@ -83,11 +83,11 @@ def f1_score_func(actual, pred):
     false_positives = tf.to_float(tf.count_nonzero(pred * (actual - 1)))
     false_negatives = tf.to_float(tf.count_nonzero((pred - 1) * actual))
     epsilon = tf.constant(1e-7, dtype=tf.float32)
-    precision = tf.divide(true_positives + epsilon,
+    precision = tf.divide(true_positives,
                           true_positives + false_positives + epsilon)
-    recall = tf.divide(true_positives + epsilon,
+    recall = tf.divide(true_positives,
                        true_positives + false_negatives + epsilon)
-    return tf.divide(2 * precision * recall + epsilon,\
+    return tf.divide(2 * precision * recall,\
                      precision + recall + epsilon)
 
 x = tf.placeholder(tf.float32, [None, 3197])
@@ -251,7 +251,7 @@ def predict_model(data, labels, sess=None, import_model=False,
         if j % display_every == 0:
             time_left = ((time.time() - initial_time) / (j + 1)) * ((len(
                         labels) / batch_size) - (j + 1))
-            sys.stdout.write("\rTest F1 Score: %6.4f, ETA: %4ds" % (
+            sys.stdout.write("\rF1 Score: %6.4f, ETA: %4ds" % (
                             total_f1_score / (j + 1), time_left))
             sys.stdout.flush()
     print "\rF1 Score: %6.4f, Time Taken: %4ds" % (total_f1_score / (j + 1),
