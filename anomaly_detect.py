@@ -77,11 +77,20 @@ def predict_ad(prob, threshold):
     out = tf.where(cond, tf.zeros(tf.shape(cond)), tf.ones(tf.shape(cond)))
     return out
 
+def predict_soft(prob):
+    threshold = tf.Variable(tf.random_uniform([], maxval=10))
+    #scale = tf.Variable(tf.random_uniform([], minval=1, maxval=1e3))
+    scale = 100
+    return tf.nn.sigmoid((threshold - prob) * scale)
+
 # Calculates the F1 score
 def f1_score_func(actual, pred):
-    true_positives = tf.to_float(tf.count_nonzero(pred * actual))
-    false_positives = tf.to_float(tf.count_nonzero(pred * (actual - 1)))
-    false_negatives = tf.to_float(tf.count_nonzero((pred - 1) * actual))
+    #true_positives = tf.to_float(tf.count_nonzero(pred * actual))
+    true_positives = tf.to_float(tf.reduce_sum(pred * actual))
+    #false_positives = tf.to_float(tf.count_nonzero(pred * (actual - 1)))
+    false_positives = tf.to_float(tf.reduce_sum(pred * (1 - actual)))
+    #false_negatives = tf.to_float(tf.count_nonzero((pred - 1) * actual))
+    false_negatives = tf.to_float(tf.reduce_sum((1 - pred) * actual))
     epsilon = tf.constant(1e-7, dtype=tf.float32)
     precision = tf.divide(true_positives,
                           true_positives + false_positives + epsilon)
@@ -105,24 +114,26 @@ y_pred = beta_dist(tf.nn.sigmoid(lstm), 128)
 #loss = tf.reduce_mean(tf.square(y_actual - tf.pow(math.e,
                                                   #-1 * tf.square(y_pred))))
 pos_weight = tf.placeholder(tf.float32, [])
-loss = tf.reduce_sum(tf.nn.weighted_cross_entropy_with_logits(targets=y_actual,
-                     logits=1/y_pred, pos_weight=pos_weight))
+#loss = tf.reduce_sum(tf.nn.weighted_cross_entropy_with_logits(targets=y_actual,
+                     #logits=1/y_pred, pos_weight=pos_weight))
 
 threshold = tf.placeholder(tf.float32, [])
 #prediction = predict(y_pred)
 #prediction = predict_autoenc(x, y_pred)
-prediction = predict_ad(y_pred, threshold)
+#prediction = predict_ad(y_pred, threshold)
+prediction = predict_soft(y_pred)
 f1_score = f1_score_func(y_actual, prediction)
-#train_step = tf.train.AdamOptimizer().minimize(loss)
-train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
-                                        use_nesterov=True).minimize(loss)
+loss = 100 * (1 - f1_score)
+train_step = tf.train.AdamOptimizer().minimize(loss)
+#train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
+                                        #use_nesterov=True).minimize(loss)
 
 # Train the model
 def train_model(train_data=None, train_labels=None, test_data=None,
                 test_labels=None, sess=None, test_split=0.3, num_epochs=100,
                 batch_size=32, loss_weight=10, anomaly_threshold=5.0,
                 early_stop_threshold=0.01, early_stop_patience=5,
-                import_model=False, display_every=1):
+                import_model=False, continue_train=True, display_every=1):
     if train_data is None or train_labels is None or test_data is None or\
     test_labels is None:
         train_data, train_labels, test_data, test_labels = split_data(
@@ -148,6 +159,9 @@ def train_model(train_data=None, train_labels=None, test_data=None,
     if sess is None:
         if tf.get_default_session() is not None:
             sess = tf.get_default_session()
+            if not continue_train:
+                sess.close()
+                sess = tf.InteractiveSession()
         else:
             sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
@@ -263,5 +277,6 @@ def predict_model(data, labels, sess=None, import_model=False,
     return np.array(results)
 
 if __name__ == '__main__':
-    train_model(anomaly_threshold=2.5, loss_weight=3)
+    train_model(anomaly_threshold=3, loss_weight=100, 
+                early_stop_threshold=0.05)
 
