@@ -78,9 +78,9 @@ def predict_ad(prob, threshold):
     return out
 
 def predict_soft(prob):
-    threshold = tf.Variable(tf.random_uniform([], maxval=10))
+    threshold = tf.Variable(tf.random_uniform([]))
     #scale = tf.Variable(tf.random_uniform([], minval=1, maxval=1e3))
-    scale = 100
+    scale = 10
     return tf.nn.sigmoid((threshold - prob) * scale)
 
 # Calculates the F1 score
@@ -114,8 +114,9 @@ y_pred = beta_dist(tf.nn.sigmoid(lstm), 128)
 #loss = tf.reduce_mean(tf.square(y_actual - tf.pow(math.e,
                                                   #-1 * tf.square(y_pred))))
 pos_weight = tf.placeholder(tf.float32, [])
-#loss = tf.reduce_sum(tf.nn.weighted_cross_entropy_with_logits(targets=y_actual,
-                     #logits=1/y_pred, pos_weight=pos_weight))
+ce_loss = tf.reduce_sum(tf.nn.weighted_cross_entropy_with_logits(
+                        targets=y_actual, logits=1/y_pred,
+                        pos_weight=pos_weight))
 
 threshold = tf.placeholder(tf.float32, [])
 #prediction = predict(y_pred)
@@ -123,16 +124,18 @@ threshold = tf.placeholder(tf.float32, [])
 #prediction = predict_ad(y_pred, threshold)
 prediction = predict_soft(y_pred)
 f1_score = f1_score_func(y_actual, prediction)
-loss = 100 * (1 - f1_score)
-train_step = tf.train.AdamOptimizer().minimize(loss)
-#train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.9,
+f1_loss = 100 * (1 - f1_score)
+#train_step = tf.train.AdamOptimizer().minimize(loss)
+ce_train_step = tf.train.AdamOptimizer().minimize(ce_loss)
+f1_train_step = tf.train.AdamOptimizer().minimize(f1_loss)
+#train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.99,
                                         #use_nesterov=True).minimize(loss)
 
 # Train the model
 def train_model(train_data=None, train_labels=None, test_data=None,
                 test_labels=None, sess=None, test_split=0.3, num_epochs=100,
                 batch_size=32, loss_weight=10, anomaly_threshold=5.0,
-                early_stop_threshold=0.01, early_stop_patience=5,
+                early_stop_threshold=0.01, early_stop_patience=5, soft=False,
                 import_model=False, continue_train=True, display_every=1):
     if train_data is None or train_labels is None or test_data is None or\
     test_labels is None:
@@ -159,7 +162,7 @@ def train_model(train_data=None, train_labels=None, test_data=None,
     if sess is None:
         if tf.get_default_session() is not None:
             sess = tf.get_default_session()
-            if not continue_train:
+            if not continue_train or import_model:
                 sess.close()
                 sess = tf.InteractiveSession()
         else:
@@ -170,6 +173,14 @@ def train_model(train_data=None, train_labels=None, test_data=None,
         saver = tf.train.import_meta_graph(program_name + '.meta')
         saver.restore(sess, tf.train.latest_checkpoint('./'))
         print "Restored model"
+
+    # Functionality for soft predictions
+    if soft:
+        train_step = f1_train_step
+        loss = f1_loss
+    else:
+        train_step = ce_train_step
+        loss = ce_loss
 
     # Training and testing model
     try:
@@ -227,7 +238,8 @@ def train_model(train_data=None, train_labels=None, test_data=None,
 
     # Saving model
     response = raw_input("Do you want to save this model? (Y/n): ")
-    if response.lower() not in ['n', 'no', 'nah', 'nein', 'nahi', 'nope']:
+    if response.strip().lower() not in ['n', 'no', 'nah', 'nein', 'nahi',
+                                        'nope']:
         saver.save(sess, './' + program_name)
         print "Saved model"
 
@@ -277,6 +289,5 @@ def predict_model(data, labels, sess=None, import_model=False,
     return np.array(results)
 
 if __name__ == '__main__':
-    train_model(anomaly_threshold=3, loss_weight=100, 
-                early_stop_threshold=0.05)
+    train_model(soft=True, early_stop_threshold=0.05)
 
