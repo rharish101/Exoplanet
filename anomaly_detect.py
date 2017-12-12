@@ -1,6 +1,7 @@
 #!/bin/python2
 import tensorflow as tf
 import numpy as np
+import subprocess
 import os
 import sys
 import time
@@ -242,6 +243,9 @@ def train_model(train_data=None, train_labels=None, test_data=None,
     if response.strip().lower() not in ['n', 'no', 'nah', 'nein', 'nahi',
                                         'nope']:
         saver.save(sess, './' + program_name)
+        subprocess.Popen("tar -czf " + program_name + ".meta.tar.gz " +\
+                         program_name + ".meta", shell=True,
+                         stdout=subprocess.PIPE)
         print "Saved model"
 
 # Predict with the model
@@ -290,5 +294,6 @@ def predict_model(data, labels, sess=None, import_model=False,
     return np.array(results)
 
 if __name__ == '__main__':
-    train_model(soft=True, early_stop_threshold=0.05)
+    train_model(num_epochs=500, batch_size=256, soft=True,
+                early_stop_threshold=0.05)
 
