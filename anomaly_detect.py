@@ -126,8 +126,9 @@ prediction = predict_soft(y_pred)
 f1_score = f1_score_func(y_actual, prediction)
 f1_loss = 100 * (1 - f1_score)
 #train_step = tf.train.AdamOptimizer().minimize(loss)
-ce_train_step = tf.train.AdamOptimizer().minimize(ce_loss)
-f1_train_step = tf.train.AdamOptimizer().minimize(f1_loss)
+optimizer = tf.train.AdamOptimizer()
+ce_train_step = optimizer.minimize(ce_loss)
+f1_train_step = optimizer.minimize(f1_loss)
 #train_step = tf.train.MomentumOptimizer(learning_rate=0.1, momentum=0.99,
                                         #use_nesterov=True).minimize(loss)
 
