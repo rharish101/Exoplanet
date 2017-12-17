@@ -1,7 +1,7 @@
 #!/bin/python2
 import numpy as np
 import os
-from scipy import ndimage
+from scipy import ndimage, fft
 from imblearn.over_sampling import SMOTE
 
 def extract_data():
@@ -50,7 +50,10 @@ def preprocess_data(data=None):
     detrend = data - smoothed
     norm_detrend = (detrend - np.mean(detrend, -1, keepdims=True)) / np.std(
                    detrend, -1, keepdims=True)
-    return reduce_upper_outliers(norm_detrend)
+    raw = reduce_upper_outliers(norm_detrend)
+    spectrum = fft(raw, n=len(raw[0]))
+    freq = np.abs(spectrum)[:, :len(spectrum[0])/2]
+    return freq / np.std(freq, -1, keepdims=True)
 
 def split_data(data=None, labels=None, test_split=0.3, preprocess=True,
                shuffle=True, smote=True):
